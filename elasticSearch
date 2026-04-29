@@ -1,0 +1,3 @@
+#ElasticSearch 跑在云端的 Kubernetes 里，外部无法直接访问
+#把云端的 9200 端口"隧道"到你本地的 9200 端口，在本地发的请求就能到达云端的 ElasticSearch
+kubectl port-forward service/elasticsearch-es-http -n elastic 9200:9200
