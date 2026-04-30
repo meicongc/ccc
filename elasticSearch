@@ -1,3 +1,57 @@
+1.
 #ElasticSearch 跑在云端的 Kubernetes 里，外部无法直接访问
 #把云端的 9200 端口"隧道"到你本地的 9200 端口，在本地发的请求就能到达云端的 ElasticSearch
 kubectl port-forward service/elasticsearch-es-http -n elastic 9200:9200
+
+2.
+#在 ElasticSearch 里创建一张"表"叫 climate-posts，并告诉它每个字段的数据类型。
+#这一步相当于 MySQL 里的 CREATE TABLE，必须先建好结构才能存数据。
+curl -XPUT -k 'https://127.0.0.1:9200/climate-posts' \
+  --user 'elastic:elastic' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "settings": {
+      "index": {
+        "number_of_shards": 3,number_of_shards: 3 — 数据分3片存储，提高查询速度
+number_of_replicas: 1 — 每片保留1个备份，防止数据丢失
+        "number_of_replicas": 1
+      }
+    },
+    "mappings": {
+      "properties": {
+        "text":            { "type": "text" },
+        "platform":        { "type": "keyword" },
+        "author":          { "type": "keyword" },
+        "created_at":      { "type": "date" },
+        "sentiment_score": { "type": "float" },
+        "sentiment_label": { "type": "keyword" },
+        "keyword":         { "type": "keyword" }
+      }
+    }
+  }' | jq '.'
+
+#3.
+#_bulk 是 ElasticSearch 的批量插入接口，一次性插入多条数据，比一条条插入快很多
+curl -XPOST -k 'https://127.0.0.1:9200/climate-posts/_bulk' \
+  --user 'elastic:elastic' \
+  --header 'Content-Type: application/json' \
+  --data '{"index":{}}
+{"text":"The bushfires in Queensland are devastating, we need urgent climate action now","platform":"reddit","author":"user1","created_at":"2026-01-15T10:00:00Z","sentiment_score":-0.82,"sentiment_label":"negative","keyword":"bushfire"}
+{"index":{}}
+{"text":"Great news! Australia just announced new renewable energy targets for 2030","platform":"bluesky","author":"user2","created_at":"2026-01-20T14:00:00Z","sentiment_score":0.76,"sentiment_label":"positive","keyword":"renewable energy"}
+{"index":{}}
+{"text":"Another flood warning issued for NSW, climate change is making this worse","platform":"mastodon","author":"user3","created_at":"2026-02-01T09:00:00Z","sentiment_score":-0.65,"sentiment_label":"negative","keyword":"flood"}
+{"index":{}}
+{"text":"Solar panel installations in Australia hit record high this quarter","platform":"reddit","author":"user4","created_at":"2026-02-10T11:00:00Z","sentiment_score":0.81,"sentiment_label":"positive","keyword":"renewable energy"}
+{"index":{}}
+{"text":"The drought conditions in Victoria are getting worse every year","platform":"bluesky","author":"user5","created_at":"2026-03-01T08:00:00Z","sentiment_score":-0.71,"sentiment_label":"negative","keyword":"drought"}
+'
+
+
+
+
+
+
+
+
+
