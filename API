@@ -3,14 +3,21 @@ API 函数
 bashcd ~/comp90024
 创建 API 函数的目录和文件：
 bashmkdir -p fission/functions/getsentiment
-这是在干什么？ 创建一个文件夹存放 API 函数的代码，因为这个函数需要依赖 elasticsearch 库，所以要单独建一个目录打包。
+ 创建一个文件夹存放 API 函数的代码，因为这个函数需要依赖 elasticsearch 库，所以要单独建一个目录打包。
+0. 安装依赖工具
+bashsudo apt install zip -y
 然后创建三个文件：
+函数目录结构：
+fission/functions/getsentiment/
+├── getsentiment.py
+├── requirements.txt
+└── build.sh
 1. 主函数文件：
 bashcat > fission/functions/getsentiment/getsentiment.py << 'EOF'
 from elasticsearch import Elasticsearch
 import json
 
-def main(context):
+def main():
     es = Elasticsearch(
         "https://elasticsearch-es-http.elastic.svc.cluster.local:9200",
         basic_auth=("elastic", "elastic"),
@@ -54,7 +61,7 @@ def main(context):
 EOF
 2. 依赖文件：
 bashcat > fission/functions/getsentiment/requirements.txt << 'EOF'
-elasticsearch==8.17.2
+elasticsearch==8.14.0
 EOF
 3. 构建脚本：
 bashcat > fission/functions/getsentiment/build.sh << 'EOF'
@@ -64,3 +71,40 @@ EOF
 chmod +x fission/functions/getsentiment/build.sh
 全部创建完后确认文件存在：
 bashls fission/functions/getsentiment/
+5.
+这个函数依赖 elasticsearch 库，不能直接上传单个文件，需要把所有文件（代码+依赖+构建脚本）打成一个 zip 包再上传给 Fission。
+创建package
+第一步：创建 Fission Package
+bashfission package create \
+  --name getsentiment-pkg \
+  --env python \
+  --src fission/functions/getsentiment.zip \
+  --buildcmd "./build.sh"
+等待 build 完成，用这个命令检查状态（需要变成 succeeded）：
+bashfission package info --name getsentiment-pkg
+
+第二步：创建 Fission Function
+bashfission fn create \
+  --name getsentiment \
+  --env python \
+  --pkg getsentiment-pkg \
+  --entrypoint "getsentiment.main"
+--entrypoint 格式是 文件名.函数名，确认你的 getsentiment.py 里入口函数叫 main。
+
+第三步：创建 HTTP Route
+bashfission route create \
+  --name getsentiment-route \
+  --method GET \
+  --url /getsentiment \
+  --function getsentiment
+
+第四步：测试
+bashfission fn test --name getsentiment
+
+# 查看函数运行日志
+fission fn log --name getsentiment
+
+# 查看所有资源
+fission pkg list
+fission fn list
+fission route list
