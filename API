@@ -1,0 +1,66 @@
+API 函数
+首先确认你在 comp90024 目录：
+bashcd ~/comp90024
+创建 API 函数的目录和文件：
+bashmkdir -p fission/functions/getsentiment
+这是在干什么？ 创建一个文件夹存放 API 函数的代码，因为这个函数需要依赖 elasticsearch 库，所以要单独建一个目录打包。
+然后创建三个文件：
+1. 主函数文件：
+bashcat > fission/functions/getsentiment/getsentiment.py << 'EOF'
+from elasticsearch import Elasticsearch
+import json
+
+def main(context):
+    es = Elasticsearch(
+        "https://elasticsearch-es-http.elastic.svc.cluster.local:9200",
+        basic_auth=("elastic", "elastic"),
+        verify_certs=False
+    )
+    
+    result = es.search(
+        index="climate-posts",
+        body={
+            "size": 0,
+            "aggs": {
+                "by_platform": {
+                    "terms": {"field": "platform"},
+                    "aggs": {
+                        "avg_sentiment": {
+                            "avg": {"field": "sentiment_score"}
+                        },
+                        "by_label": {
+                            "terms": {"field": "sentiment_label"}
+                        }
+                    }
+                }
+            }
+        }
+    )
+    
+    platforms = []
+    for bucket in result['aggregations']['by_platform']['buckets']:
+        labels = {b['key']: b['doc_count'] 
+                 for b in bucket['by_label']['buckets']}
+        platforms.append({
+            "platform": bucket['key'],
+            "total_posts": bucket['doc_count'],
+            "avg_sentiment": round(bucket['avg_sentiment']['value'], 2),
+            "positive": labels.get('positive', 0),
+            "negative": labels.get('negative', 0),
+            "neutral": labels.get('neutral', 0)
+        })
+    
+    return json.dumps({"data": platforms}, indent=2)
+EOF
+2. 依赖文件：
+bashcat > fission/functions/getsentiment/requirements.txt << 'EOF'
+elasticsearch==8.17.2
+EOF
+3. 构建脚本：
+bashcat > fission/functions/getsentiment/build.sh << 'EOF'
+#!/bin/sh
+pip install -r ${SRC_PKG}/requirements.txt -t ${SRC_PKG} && cp -r ${SRC_PKG} ${DEPLOY_PKG}
+EOF
+chmod +x fission/functions/getsentiment/build.sh
+全部创建完后确认文件存在：
+bashls fission/functions/getsentiment/
